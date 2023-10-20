@@ -1,0 +1,31 @@
+import subprocess
+import os
+
+# Define the databases to back up
+databases = ["bank_1", "bank_2", "party_1", "party_2"]
+
+# Set common PostgreSQL connection parameters
+user = "dake"
+host = "localhost"
+
+# Set the password as an environment variable
+os.environ["PGPASSWORD"] = "xxx"  # Replace with the actual password
+
+# Specify the full path to pg_dump executable
+pg_dump_executable = "C:\\Program Files\\PostgreSQL\\14\\bin\\pg_dump.exe"  # Replace with the actual path
+
+# Loop through the databases and create backups
+for db in databases:
+    backup_file = f"{db}.sql"
+    command = [
+        pg_dump_executable,
+        "-U", user,
+        "-h", host,
+        "-d", db,
+    ]
+
+    with open(backup_file, "w") as output_file:
+        subprocess.run(command, stdout=output_file)
+
+# Unset the password environment variable after use for security
+os.environ.pop("PGPASSWORD", None)
