@@ -1,0 +1,225 @@
+#######################################
+#  Postgres Database Backup Program   #
+#######################################
+#                                     #
+#           Program Flow              #
+#_____________________________________#
+# -Connect to postgres                #
+# -Get all available databases        #
+# -Option 1: Backup all available     #
+#    databases one by one             #
+# -Option 2: Backup input database    #
+#######################################
+
+
+import psycopg2
+import time
+import os
+import subprocess
+import datetime
+import logging
+import sys
+
+# Progress Tracker Variables
+databaseCount = 0
+schemasCount = 0
+start = time.time()
+for i in range(0,100000):
+    x = 0
+
+##############################################################
+##############################################################
+################# CONFIGURATION AREA #########################
+
+
+# Define pg_dump location
+# Note: Change the value inside the quotes only. 
+#   Do not remove the letter 'r' before the first quote
+
+pg_dump_executable = r"C:\Users\John\AppData\Local\Programs\pgAdmin 4\v7\runtime\pg_dump.exe"
+
+
+# Define DB credentials
+dbUserName = 'postgres'
+dbPassword = 'postgres'
+dbHost = 'localhost'
+dbPort = '5432'
+dbName = 'postgres'
+
+################# END OF CONFIGURATION AREA ##################
+##############################################################
+##############################################################
+
+
+# Define the environment variables you want to set for the subprocess
+postgres_env = {
+    'PGPASSWORD': dbPassword,
+    'PGUSER': dbUserName,
+    'PGHOST': dbHost,
+    'PGPORT': dbPort,
+    'SYSTEMROOT': os.environ['SYSTEMROOT']
+}
+
+while True:
+    print("Database Backup Option:")
+    print("Backup All -- Enter '1'")
+    print("Backup Singe -- Enter '2'")
+    print("Exit -- Enter 'x'")
+    backupOption = input("Option Selected: ")
+
+    if backupOption in ('1', '2', 'x'):
+        break
+    else:
+        os.system("cls")
+        os.system("clear")
+        print("Invalid input. Please enter '1', '2' or 'x' only.")
+
+if backupOption == 'x':
+    print("Program Ended.")
+    sys.exit(0)
+
+os.system("cls")
+os.system("clear")
+
+if backupOption == '2':
+    print("Input Database name or 'x' to exit")
+    inputDbName = input("Database Name: ")
+    if inputDbName == 'x' or inputDbName == 'rdsadmin':
+        if inputDbName == 'rdsadmin':
+            print("Not Allowed")
+        print("Program Ended.")
+        sys.exit(0)
+
+
+# Set backup variables
+if backupOption == '1':
+    currentDirectory = f"{os.getcwd()}/Backups-All"
+if backupOption == '2':
+    currentDirectory = f"{os.getcwd()}/Backups-Single"
+
+# Get the current date and time
+currentDateTime = datetime.datetime.now()
+
+folderName = currentDateTime.strftime("%Y.%m.%d-%I.%M.%S%p")
+folderPath = os.path.join(currentDirectory, folderName)
+
+
+# Create Backup Folder
+# Check if the folder exists, and create it if it doesn't
+if not os.path.exists(folderPath):
+    os.makedirs(folderPath)
+    print(f"Folder '{folderName}' created. Proceeding..")
+else:
+    print(f"Folder '{folderName}' already exists. Proceeding..")
+
+
+# Set up the logger
+logger = logging.getLogger("db_backup_logger")
+logger.setLevel(logging.DEBUG)
+
+# Create a file handler
+if backupOption == '1':
+    file_handler = logging.FileHandler(f"Backups-All/{folderName}/backup.log")
+if backupOption == '2':
+    file_handler = logging.FileHandler(f"Backups-Single/{folderName}/backup.log")
+file_handler.setLevel(logging.DEBUG)
+
+# Create a formatter
+formatter = logging.Formatter("%(asctime)s - %(message)s")
+file_handler.setFormatter(formatter)
+
+# Add the file handler to the logger
+logger.addHandler(file_handler)
+
+# Create custom logger function
+def printx(message):
+    print(message)
+    logger.info(message)
+
+
+# Program Start
+
+printx("Creating Database Connection..")
+
+# Create a database connection
+conn = psycopg2.connect(
+    database=dbName,
+    user=dbUserName,
+    password=dbPassword,
+    host=dbHost,
+    port=dbPort
+)
+
+# Get a database cursor
+cur = conn.cursor()
+
+printx("Getting all available databases..")
+
+# Get all databases
+cur.execute("""
+SELECT datname FROM pg_database WHERE datname <> ALL ('{template0,template1,postgres}')
+""")
+
+# Store response in a variable
+databases = cur.fetchall()
+
+# Close current connections
+conn.close()
+
+
+if backupOption == '1':
+    printx("%s database(s) available, Starting database backup.." % (len(databases)))
+
+if backupOption == '2':
+    printx(f"Validating input database '{inputDbName}'...")
+    validInputDbName = False
+
+for dbName in databases:
+
+    if backupOption == '2':
+        if dbName[0] == inputDbName:
+            validInputDbName = True
+    
+    else:
+        if dbName[0] != 'rdsadmin':
+
+            databaseCount += 1
+            command = [
+                pg_dump_executable,
+                f"--dbname={dbName[0]}",
+                f"--file={folderName}/{dbName[0]}.sql",
+            ]
+
+            # Run the pg_dump command from the specified working directory
+            try:
+                subprocess.run(command, check=True, shell=True, cwd=currentDirectory, env=postgres_env)
+                printx(f"Database '{dbName[0]}' backup completed successfully.")
+            except subprocess.CalledProcessError as e:
+                printx(f"Error on '{dbName[0]}' backup: {e}")  
+
+if backupOption == '1':
+    printx("%s database(s) processed." % (databaseCount))
+else:
+    if validInputDbName == False:
+        printx("Input Database name not valid. Program Ended.")
+        sys.exit(0)
+
+    else:
+        command = [
+            pg_dump_executable,
+            f"--dbname={inputDbName}",
+            f"--file={folderName}/{inputDbName}.sql",
+        ]
+
+        # Run the pg_dump command from the specified working directory
+        try:
+            subprocess.run(command, check=True, shell=True, cwd=currentDirectory, env=postgres_env)
+            printx(f"Database '{inputDbName}' backup completed successfully.")
+        except subprocess.CalledProcessError as e:
+            printx(f"Error on '{inputDbName}' backup: {e}")  
+
+end = time.time()
+elapsed_time = end-start
+
+printx("Processing finished!")
+printx("Elapsed time: %.2fs" % (elapsed_time))
