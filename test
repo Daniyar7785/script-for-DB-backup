@@ -1,0 +1,55 @@
+import subprocess
+import os
+from sshtunnel import SSHTunnelForwarder
+import psycopg2
+
+
+tunnel = SSHTunnelForwarder(
+    ('54.200.37.1', 22),
+    ssh_username='admin',
+    ssh_private_key=r'C:\Users\key.pem',
+    
+    remote_bind_address=('credo.amazonaws.com', 5432),
+    local_bind_address=('localhost', 5432),
+)
+
+print("Creating SSH Tunnel..")
+
+# Start the tunnel
+tunnel.start()
+
+# Create a database connection
+conn = psycopg2.connect(
+    database='postgres',
+    user='admin',
+    password='t',
+    host=tunnel.local_bind_host,
+    port=tunnel.local_bind_port,
+    sslmode='require'
+)
+
+# Define the databases to back up
+databases = ["dake_cpb"]
+
+
+
+
+
+# Specify the full path to pg_dump executable
+pg_dump_executable = "C:\\Program Files\\PostgreSQL\\14\\bin\\pg_dump.exe"  # Replace with the actual path
+
+# Loop through the databases and create backups
+for db in databases:
+    backup_file = f"{db}.sql"
+    command = [
+        pg_dump_executable,
+        "-U", user,
+        "-h", host,
+        "-d", db,
+    ]
+
+    with open(backup_file, "w") as output_file:
+        subprocess.run(command, stdout=output_file)
+
+# Unset the password environment variable after use for security
+os.environ.pop("PGPASSWORD", None)
